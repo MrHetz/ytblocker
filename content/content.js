@@ -69,6 +69,14 @@
       settings[key] = newValue;
     }
     applyToggleClasses();
+
+    if ("keywords" in changes || "keywordDismissalEnabled" in changes) {
+      const selector = VIDEO_SELECTORS.join(", ");
+      document.querySelectorAll(selector).forEach((el) => {
+        delete el.dataset.ytbScanned;
+      });
+      scanForKeywordMatches();
+    }
   });
 
   // --- DOM Removal ---
@@ -130,16 +138,18 @@
       const existing = parent.querySelector(selector);
       if (existing) return resolve(existing);
 
+      let timeoutId;
       const observer = new MutationObserver(() => {
         const el = parent.querySelector(selector);
         if (el) {
+          clearTimeout(timeoutId);
           observer.disconnect();
           resolve(el);
         }
       });
       observer.observe(document.body, { childList: true, subtree: true });
 
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         observer.disconnect();
         resolve(null);
       }, timeout);
@@ -155,14 +165,14 @@
 
       menuButton.click();
 
-      const menuPopup = await waitForElement(
+      const popup = await waitForElement(
         document.body,
-        "ytd-menu-service-item-renderer, tp-yt-paper-listbox ytd-menu-service-item-renderer"
+        "tp-yt-iron-dropdown:not([aria-hidden='true']), ytd-popup-container ytd-menu-popup-renderer"
       );
-      if (!menuPopup) return false;
+      if (!popup) return false;
 
-      const menuItems = document.querySelectorAll(
-        "ytd-menu-service-item-renderer, ytd-menu-service-item-download-renderer"
+      const menuItems = popup.querySelectorAll(
+        "ytd-menu-service-item-renderer"
       );
       let notInterestedItem = null;
 

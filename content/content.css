@@ -9,8 +9,7 @@ html.ytb-hide-shorts ytd-video-renderer:has(a[href*="/shorts/"]),
 html.ytb-hide-shorts ytd-compact-video-renderer:has(a[href*="/shorts/"]),
 html.ytb-hide-shorts ytd-grid-video-renderer:has(a[href*="/shorts/"]),
 html.ytb-hide-shorts ytd-reel-item-renderer,
-html.ytb-hide-shorts ytm-shorts-lockup-view-model,
-html.ytb-hide-shorts [is-shorts] {
+html.ytb-hide-shorts ytm-shorts-lockup-view-model {
   display: none !important;
 }
 
