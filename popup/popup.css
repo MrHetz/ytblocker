@@ -1,0 +1,138 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 300px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  color: #e1e1e1;
+  background: #1a1a1a;
+  padding: 16px;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #fff;
+}
+
+h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.toggles {
+  margin-bottom: 16px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 16px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #ff4444;
+}
+
+.keywords-section h2 {
+  margin-top: 4px;
+}
+
+.keyword-input-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.keyword-input-row input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #e1e1e1;
+  font-size: 13px;
+}
+
+.keyword-input-row input::placeholder {
+  color: #666;
+}
+
+.keyword-input-row button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: #ff4444;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.keyword-input-row button:hover {
+  background: #e03030;
+}
+
+#keywordList {
+  list-style: none;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+#keywordList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+#keywordList li .kw-text {
+  flex: 1;
+  font-size: 13px;
+}
+
+#keywordList li .kw-case {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+  margin-right: 6px;
+}
+
+#keywordList li .kw-case.active {
+  border-color: #ff4444;
+  color: #ff4444;
+}
+
+#keywordList li .kw-remove {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+#keywordList li .kw-remove:hover {
+  color: #ff4444;
+}

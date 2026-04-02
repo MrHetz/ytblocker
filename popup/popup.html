@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>YTBlocker</h1>
+
+  <section class="toggles">
+    <label class="toggle-row">
+      <input type="checkbox" id="shortsToggle">
+      <span>Block Shorts</span>
+    </label>
+    <label class="toggle-row">
+      <input type="checkbox" id="playablesToggle">
+      <span>Block Playables</span>
+    </label>
+  </section>
+
+  <section class="keywords-section">
+    <h2>Keywords</h2>
+    <div class="keyword-input-row">
+      <input type="text" id="keywordInput" placeholder="Add keyword...">
+      <button id="addKeyword">+</button>
+    </div>
+    <ul id="keywordList"></ul>
+    <label class="toggle-row">
+      <input type="checkbox" id="keywordDismissalToggle">
+      <span>Enable keyword dismissal</span>
+    </label>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

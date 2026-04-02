@@ -1,0 +1,26 @@
+/* Shorts blocking - applied when html has .ytb-hide-shorts */
+html.ytb-hide-shorts ytd-reel-shelf-renderer,
+html.ytb-hide-shorts ytd-rich-shelf-renderer[is-shorts],
+html.ytb-hide-shorts ytd-rich-section-renderer:has(ytd-reel-shelf-renderer),
+html.ytb-hide-shorts ytd-mini-guide-entry-renderer:has(a[title="Shorts"]),
+html.ytb-hide-shorts ytd-guide-entry-renderer:has(a[title="Shorts"]),
+html.ytb-hide-shorts ytd-rich-item-renderer:has(a[href*="/shorts/"]),
+html.ytb-hide-shorts ytd-video-renderer:has(a[href*="/shorts/"]),
+html.ytb-hide-shorts ytd-compact-video-renderer:has(a[href*="/shorts/"]),
+html.ytb-hide-shorts ytd-grid-video-renderer:has(a[href*="/shorts/"]),
+html.ytb-hide-shorts ytd-reel-item-renderer,
+html.ytb-hide-shorts ytm-shorts-lockup-view-model,
+html.ytb-hide-shorts [is-shorts] {
+  display: none !important;
+}
+
+/* Playables blocking - applied when html has .ytb-hide-playables */
+html.ytb-hide-playables ytd-rich-section-renderer:has([href*="/playables"]),
+html.ytb-hide-playables ytd-rich-item-renderer:has([href*="/playables"]),
+html.ytb-hide-playables ytd-rich-shelf-renderer:has([href*="/playables"]),
+html.ytb-hide-playables a[href*="/playables"],
+html.ytb-hide-playables ytd-compact-video-renderer:has([href*="/playables"]),
+html.ytb-hide-playables ytd-guide-entry-renderer:has(a[title="Playables"]),
+html.ytb-hide-playables ytd-mini-guide-entry-renderer:has(a[title="Playables"]) {
+  display: none !important;
+}
