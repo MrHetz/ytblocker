@@ -175,12 +175,12 @@ Settings sync between popup and content script:
 
 **Goal:** Working extension that hides and removes Shorts from YouTube.
 
-- [ ] Create `manifest.json` with MV3 config
-- [ ] Create `content/content.css` with Shorts hiding rules
-- [ ] Create `content/content.js` with MutationObserver for Shorts removal
-- [ ] Create `popup/popup.html` with Shorts toggle
-- [ ] Create `popup/popup.js` with storage read/write for Shorts toggle
-- [ ] Create placeholder icons (simple colored squares are fine for dev)
+- [x] Create `manifest.json` with MV3 config
+- [x] Create `content/content.css` with Shorts hiding rules
+- [x] Create `content/content.js` with MutationObserver for Shorts removal
+- [x] Create `popup/popup.html` with Shorts toggle
+- [x] Create `popup/popup.js` with storage read/write for Shorts toggle
+- [x] Create placeholder icons (simple colored squares are fine for dev)
 - [ ] Test: Toggle Shorts blocking on/off, verify elements hidden on home feed, sidebar, search
 
 **Validation:** Load unpacked extension, navigate YouTube, confirm Shorts shelves and links are hidden. Toggle off in popup, confirm they reappear.
@@ -189,10 +189,10 @@ Settings sync between popup and content script:
 
 **Goal:** Add Playables blocking with same pattern as Shorts.
 
-- [ ] Inspect YouTube DOM to identify Playables selectors
-- [ ] Add Playables CSS hiding rules to `content/content.css`
-- [ ] Add Playables DOM removal to existing MutationObserver in `content/content.js`
-- [ ] Add Playables toggle to `popup/popup.html` and `popup/popup.js`
+- [x] Inspect YouTube DOM to identify Playables selectors
+- [x] Add Playables CSS hiding rules to `content/content.css`
+- [x] Add Playables DOM removal to existing MutationObserver in `content/content.js`
+- [x] Add Playables toggle to `popup/popup.html` and `popup/popup.js`
 - [ ] Test: Toggle Playables blocking independently of Shorts
 
 **Validation:** Playables elements hidden/removed when enabled. Shorts and Playables toggles work independently.
@@ -201,11 +201,11 @@ Settings sync between popup and content script:
 
 **Goal:** Popup UI for managing keywords with case-sensitivity toggles.
 
-- [ ] Add keyword input field and add button to `popup/popup.html`
-- [ ] Add keyword list display with case-sensitivity toggle and delete button
-- [ ] Add master "Enable keyword dismissal" toggle
-- [ ] Implement storage read/write for keywords array in `popup/popup.js`
-- [ ] Style the popup with `popup/popup.css` — minimal, clean
+- [x] Add keyword input field and add button to `popup/popup.html`
+- [x] Add keyword list display with case-sensitivity toggle and delete button
+- [x] Add master "Enable keyword dismissal" toggle
+- [x] Implement storage read/write for keywords array in `popup/popup.js`
+- [x] Style the popup with `popup/popup.css` — minimal, clean
 - [ ] Test: Add, remove keywords. Toggle case sensitivity. Persist across popup open/close.
 
 **Validation:** Keywords persist in `chrome.storage.sync`. Reopening popup shows saved keywords.
@@ -214,13 +214,13 @@ Settings sync between popup and content script:
 
 **Goal:** Content script scans video titles and auto-dismisses matches.
 
-- [ ] Add title scanning logic to `content/content.js` — extract titles from video elements
-- [ ] Add keyword matching with case-sensitivity support
-- [ ] Implement dismissal queue with 3-5s random delay
-- [ ] Implement the click sequence: three-dot menu → "Not interested"
-- [ ] Add tab visibility check — pause when tab hidden
-- [ ] Handle edge cases: menu doesn't appear, option not found, element removed before action
-- [ ] Listen for `chrome.storage.onChanged` to react to keyword list updates
+- [x] Add title scanning logic to `content/content.js` — extract titles from video elements
+- [x] Add keyword matching with case-sensitivity support
+- [x] Implement dismissal queue with 3-5s random delay
+- [x] Implement the click sequence: three-dot menu → "Not interested"
+- [x] Add tab visibility check — pause when tab hidden
+- [x] Handle edge cases: menu doesn't appear, option not found, element removed before action
+- [x] Listen for `chrome.storage.onChanged` to react to keyword list updates
 - [ ] Test: Add keyword, navigate to YouTube, confirm matching videos get dismissed with delays
 
 **Validation:** Videos with matching titles are dismissed one-by-one with visible 3-5s delays. No errors in console. Queue pauses when switching tabs.
