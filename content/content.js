@@ -115,12 +115,14 @@
     const selector = VIDEO_SELECTORS.join(", ");
     document.querySelectorAll(selector).forEach((el) => {
       if (el.dataset.ytbScanned) return;
-      el.dataset.ytbScanned = "true";
 
       const titleEl = el.querySelector("#video-title");
       if (!titleEl) return;
 
       const title = titleEl.textContent.trim();
+      if (!title) return;
+
+      el.dataset.ytbScanned = "true";
       if (matchesKeyword(title)) {
         dismissalQueue.push(el);
         processQueue();
