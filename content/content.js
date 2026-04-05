@@ -71,6 +71,7 @@
     applyToggleClasses();
 
     if ("keywords" in changes || "keywordDismissalEnabled" in changes) {
+      dismissalQueue.length = 0;
       const selector = VIDEO_SELECTORS.join(", ");
       document.querySelectorAll(selector).forEach((el) => {
         delete el.dataset.ytbScanned;
@@ -203,7 +204,7 @@
     isProcessingQueue = true;
 
     async function processNext() {
-      if (dismissalQueue.length === 0 || document.hidden) {
+      if (dismissalQueue.length === 0 || document.hidden || !settings.keywordDismissalEnabled) {
         isProcessingQueue = false;
         return;
       }
