@@ -170,7 +170,10 @@
         document.body,
         "tp-yt-iron-dropdown:not([aria-hidden='true']), ytd-popup-container ytd-menu-popup-renderer"
       );
-      if (!popup) return false;
+      if (!popup) {
+        document.body.click();
+        return false;
+      }
 
       const menuItems = popup.querySelectorAll(
         "ytd-menu-service-item-renderer"
@@ -193,6 +196,7 @@
       notInterestedItem.click();
       return true;
     } catch {
+      document.body.click();
       return false;
     }
   }
