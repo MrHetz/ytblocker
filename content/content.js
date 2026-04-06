@@ -199,6 +199,14 @@
 
     for (const shelf of shelves) {
       if (shelf.dataset.ytbPrimetimeScanned) continue;
+
+      // Check if title has loaded yet — don't mark as scanned until it has
+      const titleEl =
+        shelf.querySelector("#title-text") ||
+        shelf.querySelector("[id='title'] yt-formatted-string") ||
+        shelf.querySelector("#title");
+      if (!titleEl || !titleEl.textContent.trim()) continue;
+
       shelf.dataset.ytbPrimetimeScanned = "true";
       if (!isPrimetimeShelf(shelf)) continue;
 
