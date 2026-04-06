@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh search:*)",
+      "Bash(git:*)",
+      "Bash(gh issue:*)",
+      "Bash(wt:*)",
+      "Read(//c/Users/jimmy/git/ytblocker-feat-page-type-scanning/**)",
+      "Bash(gh pr create --title 'feat: Page-type-aware scanning optimization' --body ':*)",
+      "Bash(gh pr:*)"
+    ]
+  }
+}
