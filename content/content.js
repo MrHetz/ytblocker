@@ -34,6 +34,19 @@
   const MENU_ITEM_SELECTORS =
     "ytd-menu-service-item-renderer, tp-yt-paper-item, [role='menuitem'], [role='option'], a, button, li";
 
+  // --- Page Type Detection ---
+
+  function getPageType() {
+    const path = location.pathname;
+    if (path === "/" || path.startsWith("/feed/")) return "feed";
+    if (path === "/results") return "search";
+    if (path === "/watch") return "watch";
+    return null;
+  }
+
+  let currentPageType = null;
+  let scanIntervalId = null;
+
   let settings = {
     shortsBlocked: true,
     playablesBlocked: true,
@@ -161,7 +174,9 @@
         console.log("[YTBlocker] Keyword match:", title);
         el.style.opacity = "0";
         el.style.pointerEvents = "none";
-        dismissalQueue.push({ el, retries: 0 });
+        if (currentPageType !== "watch") {
+          dismissalQueue.push({ el, retries: 0 });
+        }
         matched = true;
       }
     });
@@ -369,12 +384,15 @@
   function runAllScans() {
     removeMatchingElements();
     scanForKeywordMatches();
-    scanForPrimetimeMovies();
+    if (currentPageType === "feed") {
+      scanForPrimetimeMovies();
+    }
   }
 
   let debounceTimer = null;
 
   function onMutation() {
+    if (currentPageType === null) return;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(runAllScans, 200);
   }
@@ -389,17 +407,37 @@
     }
   }
 
+  function onNavigate() {
+    const newType = getPageType();
+    if (newType === currentPageType) return;
+    currentPageType = newType;
+    console.log("[YTBlocker] Page type:", currentPageType);
+
+    clearInterval(scanIntervalId);
+    scanIntervalId = null;
+
+    if (currentPageType !== null) {
+      // Reset scan markers — new page has new content
+      document.querySelectorAll(VIDEO_SELECTOR).forEach((el) => {
+        delete el.dataset.ytbScanned;
+      });
+      document.querySelectorAll(PRIMETIME_SHELF_SELECTOR).forEach((el) => {
+        delete el.dataset.ytbPrimetimeScanned;
+      });
+      runAllScans();
+      scanIntervalId = setInterval(runAllScans, 2000);
+    }
+  }
+
   function startObserver() {
     const observer = new MutationObserver(onMutation);
     observer.observe(document.body, {
       childList: true,
       subtree: true,
-      characterData: true,
     });
-    runAllScans();
 
-    // Periodic rescan — YouTube populates titles lazily after elements are in the DOM
-    setInterval(runAllScans, 2000);
+    document.addEventListener("yt-navigate-finish", onNavigate);
+    onNavigate();
   }
 
   init();
