@@ -26,15 +26,37 @@
     "ytd-grid-video-renderer",
   ];
 
+  const VIDEO_SELECTOR = VIDEO_SELECTORS.join(", ");
+
+  const POPUP_SELECTORS =
+    "tp-yt-iron-dropdown, ytd-popup-container, ytd-menu-popup-renderer, [role='listbox'], [role='menu']";
+
+  const MENU_ITEM_SELECTORS =
+    "ytd-menu-service-item-renderer, tp-yt-paper-item, [role='menuitem'], [role='option'], a, button, li";
+
   let settings = {
     shortsBlocked: true,
     playablesBlocked: true,
+    primetimeBlocked: true,
     keywordDismissalEnabled: false,
     keywords: [],
   };
 
   let dismissalQueue = [];
   let isProcessingQueue = false;
+
+  // --- Shared Helpers ---
+
+  function getVideoTitle(videoEl) {
+    const titleEl = videoEl.querySelector("#video-title")
+      || videoEl.querySelector("h3[title]")
+      || videoEl.querySelector("a.yt-lockup-metadata-view-model__title");
+    if (!titleEl) return "";
+    return titleEl.getAttribute("title")
+      || titleEl.getAttribute("aria-label")
+      || titleEl.textContent.trim()
+      || "";
+  }
 
   // --- Settings ---
 
@@ -54,12 +76,18 @@
       {
         shortsBlocked: true,
         playablesBlocked: true,
+        primetimeBlocked: true,
         keywordDismissalEnabled: false,
         keywords: [],
       },
       (result) => {
         settings = result;
+        console.log("[YTBlocker] Settings loaded:", JSON.stringify({
+          keywordDismissalEnabled: settings.keywordDismissalEnabled,
+          keywords: settings.keywords,
+        }));
         applyToggleClasses();
+        runAllScans();
       }
     );
   }
@@ -72,11 +100,14 @@
 
     if ("keywords" in changes || "keywordDismissalEnabled" in changes) {
       dismissalQueue.length = 0;
-      const selector = VIDEO_SELECTORS.join(", ");
-      document.querySelectorAll(selector).forEach((el) => {
+      document.querySelectorAll(VIDEO_SELECTOR).forEach((el) => {
         delete el.dataset.ytbScanned;
       });
       scanForKeywordMatches();
+    }
+
+    if ("primetimeBlocked" in changes) {
+      scanForPrimetimeMovies();
     }
   });
 
@@ -112,28 +143,83 @@
       return;
     }
 
-    const selector = VIDEO_SELECTORS.join(", ");
-    document.querySelectorAll(selector).forEach((el) => {
-      if (el.dataset.ytbScanned) return;
+    const allVideos = document.querySelectorAll(VIDEO_SELECTOR);
+    let scannedCount = 0;
+    let newCount = 0;
+    let matched = false;
 
-      const titleEl = el.querySelector("#video-title");
-      if (!titleEl) return;
+    allVideos.forEach((el) => {
+      if (el.dataset.ytbScanned) { scannedCount++; return; }
 
-      const title = titleEl.textContent.trim();
+      const title = getVideoTitle(el);
       if (!title) return;
 
+      newCount++;
       el.dataset.ytbScanned = "true";
+
       if (matchesKeyword(title)) {
-        dismissalQueue.push(el);
-        processQueue();
+        console.log("[YTBlocker] Keyword match:", title);
+        el.style.display = "none";
+        dismissalQueue.push({ el, retries: 0 });
+        matched = true;
       }
     });
+
+    if (matched) processQueue();
+
+    if (newCount > 0) {
+      console.log("[YTBlocker] Scan: total=" + allVideos.length + " alreadyScanned=" + scannedCount + " new=" + newCount + " queueSize=" + dismissalQueue.length);
+    }
+  }
+
+  // --- Primetime Movies Blocking ---
+
+  const PRIMETIME_SHELF_SELECTORS = [
+    "ytd-rich-shelf-renderer",
+    "ytd-rich-section-renderer",
+    "ytd-shelf-renderer",
+  ];
+
+  const PRIMETIME_SHELF_SELECTOR = PRIMETIME_SHELF_SELECTORS.join(", ");
+
+  function isPrimetimeShelf(el) {
+    const titleEl =
+      el.querySelector("#title-text") ||
+      el.querySelector("[id='title'] yt-formatted-string") ||
+      el.querySelector("#title");
+    if (!titleEl) return false;
+    return titleEl.textContent.trim().toLowerCase().includes("primetime");
+  }
+
+  function scanForPrimetimeMovies() {
+    if (!settings.primetimeBlocked) return;
+
+    const shelves = document.querySelectorAll(PRIMETIME_SHELF_SELECTOR);
+
+    for (const shelf of shelves) {
+      if (shelf.dataset.ytbPrimetimeScanned) continue;
+      if (!isPrimetimeShelf(shelf)) {
+        // Only skip future scans if the title element exists (i.e. loaded but not primetime).
+        // If title hasn't loaded yet, leave unmarked so we re-check later.
+        const titleEl = shelf.querySelector("#title-text")
+          || shelf.querySelector("[id='title'] yt-formatted-string")
+          || shelf.querySelector("#title");
+        if (titleEl && titleEl.textContent.trim()) {
+          shelf.dataset.ytbPrimetimeScanned = "true";
+        }
+        continue;
+      }
+      shelf.dataset.ytbPrimetimeScanned = "true";
+
+      console.log("[YTBlocker] Primetime shelf removed");
+      shelf.remove();
+    }
   }
 
   // --- "Not Interested" Dismissal Queue ---
 
   function randomDelay() {
-    return 3000 + Math.random() * 2000;
+    return 1500 + Math.random() * 1500;
   }
 
   function waitForElement(parent, selector, timeout = 3000) {
@@ -150,7 +236,7 @@
           resolve(el);
         }
       });
-      observer.observe(document.body, { childList: true, subtree: true });
+      observer.observe(parent, { childList: true, subtree: true });
 
       timeoutId = setTimeout(() => {
         observer.disconnect();
@@ -159,49 +245,98 @@
     });
   }
 
-  async function dismissVideo(videoEl) {
-    try {
-      const menuButton = videoEl.querySelector(
-        "ytd-menu-renderer button, yt-icon-button.dropdown-trigger, button[aria-label='Action menu']"
-      );
-      if (!menuButton) return false;
+  function findNotInterestedItem() {
+    const popups = document.querySelectorAll(POPUP_SELECTORS);
+    for (const popup of popups) {
+      if (popup.getAttribute("aria-hidden") === "true") continue;
+      // opacity:0 elements (from ytb-dismissing) still have offsetParent, so this works
+      if (getComputedStyle(popup).display === "none") continue;
 
-      menuButton.click();
-
-      const popup = await waitForElement(
-        document.body,
-        "tp-yt-iron-dropdown:not([aria-hidden='true']), ytd-popup-container ytd-menu-popup-renderer"
-      );
-      if (!popup) {
-        document.body.click();
-        return false;
-      }
-
-      const menuItems = popup.querySelectorAll(
-        "ytd-menu-service-item-renderer"
-      );
-      let notInterestedItem = null;
-
-      for (const item of menuItems) {
-        const text = item.textContent.trim().toLowerCase();
-        if (text.includes("not interested")) {
-          notInterestedItem = item;
-          break;
+      const candidates = popup.querySelectorAll(MENU_ITEM_SELECTORS);
+      for (const item of candidates) {
+        if (item.textContent.trim().toLowerCase().includes("not interested")) {
+          return item;
         }
       }
+    }
+    return null;
+  }
 
-      if (!notInterestedItem) {
-        document.body.click();
+  function getPopupMenuText() {
+    const popups = document.querySelectorAll(POPUP_SELECTORS);
+    const texts = [];
+    for (const popup of popups) {
+      if (popup.getAttribute("aria-hidden") === "true") continue;
+      const items = popup.querySelectorAll(MENU_ITEM_SELECTORS);
+      items.forEach((i) => texts.push(i.textContent.trim()));
+    }
+    return texts;
+  }
+
+  function closePopup() {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    document.body.click();
+  }
+
+  async function dismissVideo(videoEl) {
+    const title = getVideoTitle(videoEl) || "(unknown)";
+
+    // Temporarily restore visibility so YouTube's lazy rendering works
+    const wasHidden = videoEl.style.display === "none";
+    if (wasHidden) videoEl.style.display = "";
+
+    try {
+      // Hover to trigger lazy rendering of the menu button
+      videoEl.dispatchEvent(
+        new MouseEvent("mouseenter", { bubbles: true, composed: true })
+      );
+      videoEl.dispatchEvent(
+        new MouseEvent("mouseover", { bubbles: true, composed: true })
+      );
+
+      const menuButton = await waitForElement(
+        videoEl,
+        "button[aria-label='More actions'], button[aria-label='Action menu'], ytd-menu-renderer button, yt-icon-button.dropdown-trigger",
+        2000
+      );
+      if (!menuButton) {
+        console.log("[YTBlocker] FAIL: menu button not found for:", title);
+        if (wasHidden) videoEl.style.display = "none";
         return false;
       }
 
+      console.log("[YTBlocker] Opening menu for:", title);
+      document.documentElement.classList.add("ytb-dismissing");
+      menuButton.click();
+
+      await new Promise((r) => setTimeout(r, 500));
+
+      const notInterestedItem = findNotInterestedItem();
+
+      if (!notInterestedItem) {
+        const allPopupText = getPopupMenuText();
+        console.log("[YTBlocker] FAIL: 'Not interested' not found. Visible menu text:", allPopupText);
+        closePopup();
+        document.documentElement.classList.remove("ytb-dismissing");
+        if (wasHidden) videoEl.style.display = "none";
+        return false;
+      }
+
+      console.log("[YTBlocker] DISMISSED:", title);
       notInterestedItem.click();
+      document.documentElement.classList.remove("ytb-dismissing");
+      if (wasHidden) videoEl.style.display = "none";
       return true;
-    } catch {
-      document.body.click();
+    } catch (e) {
+      console.log("[YTBlocker] FAIL: error for:", title, e);
+      closePopup();
+      document.documentElement.classList.remove("ytb-dismissing");
+      if (wasHidden) videoEl.style.display = "none";
       return false;
     }
   }
+
+  const MAX_RETRIES = 2;
 
   function processQueue() {
     if (isProcessingQueue || dismissalQueue.length === 0) return;
@@ -215,9 +350,13 @@
         return;
       }
 
-      const videoEl = dismissalQueue.shift();
+      const { el: videoEl, retries } = dismissalQueue.shift();
+
       if (videoEl.isConnected) {
-        await dismissVideo(videoEl);
+        const success = await dismissVideo(videoEl);
+        if (!success && retries < MAX_RETRIES) {
+          dismissalQueue.push({ el: videoEl, retries: retries + 1 });
+        }
       }
 
       setTimeout(processNext, randomDelay());
@@ -234,14 +373,17 @@
 
   // --- MutationObserver ---
 
+  function runAllScans() {
+    removeMatchingElements();
+    scanForKeywordMatches();
+    scanForPrimetimeMovies();
+  }
+
   let debounceTimer = null;
 
   function onMutation() {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      removeMatchingElements();
-      scanForKeywordMatches();
-    }, 200);
+    debounceTimer = setTimeout(runAllScans, 200);
   }
 
   function init() {
@@ -256,9 +398,15 @@
 
   function startObserver() {
     const observer = new MutationObserver(onMutation);
-    observer.observe(document.body, { childList: true, subtree: true });
-    removeMatchingElements();
-    scanForKeywordMatches();
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    runAllScans();
+
+    // Periodic rescan — YouTube populates titles lazily after elements are in the DOM
+    setInterval(runAllScans, 2000);
   }
 
   init();
