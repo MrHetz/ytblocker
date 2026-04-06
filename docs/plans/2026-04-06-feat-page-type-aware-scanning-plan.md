@@ -150,11 +150,11 @@ function startObserver() {
 
 **Goal:** Detect YouTube page type and respond to SPA navigation.
 
-- [ ] Add `getPageType()` function and `SCANNING_PAGES` constant after selector constants in `content/content.js`
-- [ ] Add `currentPageType` and `scanIntervalId` state variables
-- [ ] Add `onNavigate()` function that determines page type, manages interval, and resets scan markers
-- [ ] Wire `yt-navigate-finish` event listener in `startObserver()`
-- [ ] Call `onNavigate()` at init time for initial page load
+- [x] Add `getPageType()` function and `SCANNING_PAGES` constant after selector constants in `content/content.js`
+- [x] Add `currentPageType` and `scanIntervalId` state variables
+- [x] Add `onNavigate()` function that determines page type, manages interval, and resets scan markers
+- [x] Wire `yt-navigate-finish` event listener in `startObserver()`
+- [x] Call `onNavigate()` at init time for initial page load
 
 **Validation:** Open DevTools console. Navigate between YouTube home, a video, search results, and a channel page. Confirm `[YTBlocker]` logs show page type changes. Confirm no scanning-related logs appear on watch/shorts/channel pages.
 
@@ -162,11 +162,11 @@ function startObserver() {
 
 **Goal:** Each scan only runs on appropriate pages.
 
-- [ ] Add page-type guard to `onMutation()` — early return if not a scanning page
-- [ ] Modify `runAllScans()` to only call `scanForPrimetimeMovies()` on feed pages
-- [ ] Modify `scanForKeywordMatches()` to skip `dismissalQueue.push()` when `currentPageType === "watch"`
-- [ ] Remove `characterData: true` from MutationObserver options in `startObserver()`
-- [ ] Remove the standalone `setInterval(runAllScans, 2000)` from `startObserver()` (now managed by `onNavigate`)
+- [x] Add page-type guard to `onMutation()` — early return if not a scanning page
+- [x] Modify `runAllScans()` to only call `scanForPrimetimeMovies()` on feed pages
+- [x] Modify `scanForKeywordMatches()` to skip `dismissalQueue.push()` when `currentPageType === "watch"`
+- [x] Remove `characterData: true` from MutationObserver options in `startObserver()`
+- [x] Remove the standalone `setInterval(runAllScans, 2000)` from `startObserver()` (now managed by `onNavigate`)
 
 **Validation:** Navigate to a watch page with keyword dismissal enabled. Confirm sidebar videos matching keywords get hidden (opacity:0) but NO menu clicks occur — no auto-navigation. Navigate to home feed and confirm full dismissal automation still works.
 
@@ -201,7 +201,7 @@ function startObserver() {
 
 ### Non-Functional Requirements
 
-- [ ] No `setInterval` ticking on watch/shorts/channel pages (zero CPU cost for scanning)
+- [ ] No `setInterval` ticking on shorts/channel/other pages (zero CPU cost for scanning)
 - [ ] `characterData` removed from MutationObserver options (fewer callbacks)
 - [ ] MutationObserver callback returns early on non-scanning pages
 - [ ] No regressions to existing Shorts, Playables, Primetime, or keyword dismissal features
