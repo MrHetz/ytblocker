@@ -159,7 +159,8 @@
 
       if (matchesKeyword(title)) {
         console.log("[YTBlocker] Keyword match:", title);
-        el.style.display = "none";
+        el.style.opacity = "0";
+        el.style.pointerEvents = "none";
         dismissalQueue.push({ el, retries: 0 });
         matched = true;
       }
@@ -281,10 +282,6 @@
   async function dismissVideo(videoEl) {
     const title = getVideoTitle(videoEl) || "(unknown)";
 
-    // Temporarily restore visibility so YouTube's lazy rendering works
-    const wasHidden = videoEl.style.display === "none";
-    if (wasHidden) videoEl.style.display = "";
-
     try {
       // Hover to trigger lazy rendering of the menu button
       videoEl.dispatchEvent(
@@ -301,7 +298,6 @@
       );
       if (!menuButton) {
         console.log("[YTBlocker] FAIL: menu button not found for:", title);
-        if (wasHidden) videoEl.style.display = "none";
         return false;
       }
 
@@ -318,20 +314,17 @@
         console.log("[YTBlocker] FAIL: 'Not interested' not found. Visible menu text:", allPopupText);
         closePopup();
         document.documentElement.classList.remove("ytb-dismissing");
-        if (wasHidden) videoEl.style.display = "none";
         return false;
       }
 
       console.log("[YTBlocker] DISMISSED:", title);
       notInterestedItem.click();
       document.documentElement.classList.remove("ytb-dismissing");
-      if (wasHidden) videoEl.style.display = "none";
       return true;
     } catch (e) {
       console.log("[YTBlocker] FAIL: error for:", title, e);
       closePopup();
       document.documentElement.classList.remove("ytb-dismissing");
-      if (wasHidden) videoEl.style.display = "none";
       return false;
     }
   }
