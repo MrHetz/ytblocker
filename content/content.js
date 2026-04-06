@@ -110,6 +110,7 @@
       settings[key] = newValue;
     }
     applyToggleClasses();
+    if (currentPageType === null) return;
 
     if ("keywords" in changes || "keywordDismissalEnabled" in changes) {
       dismissalQueue.length = 0;
@@ -119,7 +120,7 @@
       scanForKeywordMatches();
     }
 
-    if ("primetimeBlocked" in changes) {
+    if ("primetimeBlocked" in changes && currentPageType === "feed") {
       scanForPrimetimeMovies();
     }
   });
@@ -408,13 +409,12 @@
   }
 
   function onNavigate() {
-    const newType = getPageType();
-    if (newType === currentPageType) return;
-    currentPageType = newType;
+    currentPageType = getPageType();
     console.log("[YTBlocker] Page type:", currentPageType);
 
     clearInterval(scanIntervalId);
     scanIntervalId = null;
+    clearTimeout(debounceTimer);
 
     if (currentPageType !== null) {
       // Reset scan markers — new page has new content

@@ -201,7 +201,7 @@ function startObserver() {
 
 ### Non-Functional Requirements
 
-- [ ] No `setInterval` ticking on watch/shorts/channel pages (zero CPU cost for scanning)
+- [ ] No `setInterval` ticking on shorts/channel/other pages (zero CPU cost for scanning)
 - [ ] `characterData` removed from MutationObserver options (fewer callbacks)
 - [ ] MutationObserver callback returns early on non-scanning pages
 - [ ] No regressions to existing Shorts, Playables, Primetime, or keyword dismissal features
