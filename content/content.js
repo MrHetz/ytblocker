@@ -100,7 +100,9 @@
           keywords: settings.keywords,
         }));
         applyToggleClasses();
-        runAllScans();
+        if (currentPageType !== null) {
+          runAllScans();
+        }
       }
     );
   }
