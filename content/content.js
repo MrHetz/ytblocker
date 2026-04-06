@@ -100,7 +100,7 @@
 
     if ("keywords" in changes || "keywordDismissalEnabled" in changes) {
       dismissalQueue.length = 0;
-      if ("keywordDismissalEnabled" in changes && !settings.keywordDismissalEnabled) {
+      if (("keywordDismissalEnabled" in changes && !settings.keywordDismissalEnabled) || "keywords" in changes) {
         document.querySelectorAll(VIDEO_SELECTOR).forEach((el) => {
           el.style.opacity = "";
           el.style.pointerEvents = "";
