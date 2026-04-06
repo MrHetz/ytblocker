@@ -199,16 +199,18 @@
 
     for (const shelf of shelves) {
       if (shelf.dataset.ytbPrimetimeScanned) continue;
-
-      // Check if title has loaded yet — don't mark as scanned until it has
-      const titleEl =
-        shelf.querySelector("#title-text") ||
-        shelf.querySelector("[id='title'] yt-formatted-string") ||
-        shelf.querySelector("#title");
-      if (!titleEl || !titleEl.textContent.trim()) continue;
-
+      if (!isPrimetimeShelf(shelf)) {
+        // Only skip future scans if the title element exists (i.e. loaded but not primetime).
+        // If title hasn't loaded yet, leave unmarked so we re-check later.
+        const titleEl = shelf.querySelector("#title-text")
+          || shelf.querySelector("[id='title'] yt-formatted-string")
+          || shelf.querySelector("#title");
+        if (titleEl && titleEl.textContent.trim()) {
+          shelf.dataset.ytbPrimetimeScanned = "true";
+        }
+        continue;
+      }
       shelf.dataset.ytbPrimetimeScanned = "true";
-      if (!isPrimetimeShelf(shelf)) continue;
 
       console.log("[YTBlocker] Primetime shelf removed");
       shelf.remove();
