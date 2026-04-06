@@ -175,10 +175,16 @@
 
       if (matchesKeyword(title)) {
         console.log("[YTBlocker] Keyword match:", title);
-        el.style.opacity = "0";
-        el.style.pointerEvents = "none";
-        if (currentPageType !== "watch") {
-          dismissalQueue.push({ el, retries: 0 });
+        if (currentPageType === "search") {
+          // On search pages, remove immediately — the "Not Interested"
+          // dismissal flow simulates clicks that trigger auto-navigation.
+          el.remove();
+        } else {
+          el.style.opacity = "0";
+          el.style.pointerEvents = "none";
+          if (currentPageType !== "watch") {
+            dismissalQueue.push({ el, retries: 0 });
+          }
         }
         matched = true;
       }
