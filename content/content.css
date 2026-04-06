@@ -13,6 +13,14 @@ html.ytb-hide-shorts ytm-shorts-lockup-view-model {
   display: none !important;
 }
 
+/* Hide popups during automated dismissal */
+html.ytb-dismissing tp-yt-iron-dropdown,
+html.ytb-dismissing ytd-popup-container,
+html.ytb-dismissing ytd-menu-popup-renderer {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* Playables blocking - applied when html has .ytb-hide-playables */
 html.ytb-hide-playables ytd-rich-section-renderer:has([href*="/playables"]),
 html.ytb-hide-playables ytd-rich-item-renderer:has([href*="/playables"]),
