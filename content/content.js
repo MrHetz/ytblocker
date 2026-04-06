@@ -37,6 +37,7 @@
   let settings = {
     shortsBlocked: true,
     playablesBlocked: true,
+    primetimeBlocked: true,
     keywordDismissalEnabled: false,
     keywords: [],
   };
@@ -75,6 +76,7 @@
       {
         shortsBlocked: true,
         playablesBlocked: true,
+        primetimeBlocked: true,
         keywordDismissalEnabled: false,
         keywords: [],
       },
@@ -85,8 +87,7 @@
           keywords: settings.keywords,
         }));
         applyToggleClasses();
-        removeMatchingElements();
-        scanForKeywordMatches();
+        runAllScans();
       }
     );
   }
@@ -103,6 +104,10 @@
         delete el.dataset.ytbScanned;
       });
       scanForKeywordMatches();
+    }
+
+    if ("primetimeBlocked" in changes) {
+      scanForPrimetimeMovies();
     }
   });
 
@@ -154,7 +159,8 @@
 
       if (matchesKeyword(title)) {
         console.log("[YTBlocker] Keyword match:", title);
-        el.style.display = "none";
+        el.style.opacity = "0";
+        el.style.pointerEvents = "none";
         dismissalQueue.push({ el, retries: 0 });
         matched = true;
       }
@@ -164,6 +170,40 @@
 
     if (newCount > 0) {
       console.log("[YTBlocker] Scan: total=" + allVideos.length + " alreadyScanned=" + scannedCount + " new=" + newCount + " queueSize=" + dismissalQueue.length);
+    }
+  }
+
+  // --- Primetime Movies Blocking ---
+
+  const PRIMETIME_SHELF_SELECTORS = [
+    "ytd-rich-shelf-renderer",
+    "ytd-rich-section-renderer",
+    "ytd-shelf-renderer",
+  ];
+
+  const PRIMETIME_SHELF_SELECTOR = PRIMETIME_SHELF_SELECTORS.join(", ");
+
+  function isPrimetimeShelf(el) {
+    const titleEl =
+      el.querySelector("#title-text") ||
+      el.querySelector("[id='title'] yt-formatted-string") ||
+      el.querySelector("#title");
+    if (!titleEl) return false;
+    return titleEl.textContent.trim().toLowerCase().includes("primetime");
+  }
+
+  function scanForPrimetimeMovies() {
+    if (!settings.primetimeBlocked) return;
+
+    const shelves = document.querySelectorAll(PRIMETIME_SHELF_SELECTOR);
+
+    for (const shelf of shelves) {
+      if (shelf.dataset.ytbPrimetimeScanned) continue;
+      shelf.dataset.ytbPrimetimeScanned = "true";
+      if (!isPrimetimeShelf(shelf)) continue;
+
+      console.log("[YTBlocker] Primetime shelf removed");
+      shelf.remove();
     }
   }
 
@@ -316,14 +356,17 @@
 
   // --- MutationObserver ---
 
+  function runAllScans() {
+    removeMatchingElements();
+    scanForKeywordMatches();
+    scanForPrimetimeMovies();
+  }
+
   let debounceTimer = null;
 
   function onMutation() {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      removeMatchingElements();
-      scanForKeywordMatches();
-    }, 200);
+    debounceTimer = setTimeout(runAllScans, 200);
   }
 
   function init() {
@@ -343,14 +386,10 @@
       subtree: true,
       characterData: true,
     });
-    removeMatchingElements();
-    scanForKeywordMatches();
+    runAllScans();
 
     // Periodic rescan — YouTube populates titles lazily after elements are in the DOM
-    setInterval(() => {
-      removeMatchingElements();
-      scanForKeywordMatches();
-    }, 2000);
+    setInterval(runAllScans, 2000);
   }
 
   init();

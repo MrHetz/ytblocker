@@ -3,6 +3,7 @@
 
   const shortsToggle = document.getElementById("shortsToggle");
   const playablesToggle = document.getElementById("playablesToggle");
+  const primetimeToggle = document.getElementById("primetimeToggle");
   const keywordDismissalToggle = document.getElementById(
     "keywordDismissalToggle"
   );
@@ -18,12 +19,14 @@
     {
       shortsBlocked: true,
       playablesBlocked: true,
+      primetimeBlocked: true,
       keywordDismissalEnabled: false,
       keywords: [],
     },
     (result) => {
       shortsToggle.checked = result.shortsBlocked;
       playablesToggle.checked = result.playablesBlocked;
+      primetimeToggle.checked = result.primetimeBlocked;
       keywordDismissalToggle.checked = result.keywordDismissalEnabled;
       keywords = result.keywords;
       renderKeywords();
@@ -38,6 +41,10 @@
 
   playablesToggle.addEventListener("change", () => {
     chrome.storage.sync.set({ playablesBlocked: playablesToggle.checked });
+  });
+
+  primetimeToggle.addEventListener("change", () => {
+    chrome.storage.sync.set({ primetimeBlocked: primetimeToggle.checked });
   });
 
   keywordDismissalToggle.addEventListener("change", () => {
