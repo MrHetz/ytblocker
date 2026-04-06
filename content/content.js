@@ -159,8 +159,7 @@
 
       if (matchesKeyword(title)) {
         console.log("[YTBlocker] Keyword match:", title);
-        el.style.opacity = "0";
-        el.style.pointerEvents = "none";
+        el.style.display = "none";
         dismissalQueue.push({ el, retries: 0 });
         matched = true;
       }
@@ -199,8 +198,18 @@
 
     for (const shelf of shelves) {
       if (shelf.dataset.ytbPrimetimeScanned) continue;
+      if (!isPrimetimeShelf(shelf)) {
+        // Only skip future scans if the title element exists (i.e. loaded but not primetime).
+        // If title hasn't loaded yet, leave unmarked so we re-check later.
+        const titleEl = shelf.querySelector("#title-text")
+          || shelf.querySelector("[id='title'] yt-formatted-string")
+          || shelf.querySelector("#title");
+        if (titleEl && titleEl.textContent.trim()) {
+          shelf.dataset.ytbPrimetimeScanned = "true";
+        }
+        continue;
+      }
       shelf.dataset.ytbPrimetimeScanned = "true";
-      if (!isPrimetimeShelf(shelf)) continue;
 
       console.log("[YTBlocker] Primetime shelf removed");
       shelf.remove();
