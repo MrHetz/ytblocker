@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "YTBlocker",
   "version": "1.0.0",
-  "description": "Block YouTube Shorts, Playables, and auto-dismiss videos by keyword",
+  "description": "Block YouTube Shorts, Playables, channels, playlists, and videos by keyword",
   "permissions": ["storage"],
   "host_permissions": ["*://*.youtube.com/*"],
   "content_scripts": [

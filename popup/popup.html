@@ -20,6 +20,25 @@
       <input type="checkbox" id="primetimeToggle">
       <span>Block Free Primetime Movies</span>
     </label>
+    <label class="toggle-row">
+      <input type="checkbox" id="playlistDismissalToggle">
+      <span>Block playlists</span>
+    </label>
+  </section>
+
+  <section class="timing-section">
+    <h2>Queue Timing</h2>
+    <div class="timing-row">
+      <label>
+        <span>Min</span>
+        <input type="number" id="delayMinInput" min="1" max="120" step="1">
+      </label>
+      <label>
+        <span>Max</span>
+        <input type="number" id="delayMaxInput" min="1" max="120" step="1">
+      </label>
+      <span class="timing-unit">seconds</span>
+    </div>
   </section>
 
   <section class="keywords-section">
@@ -32,6 +51,19 @@
     <label class="toggle-row">
       <input type="checkbox" id="keywordDismissalToggle">
       <span>Enable keyword dismissal</span>
+    </label>
+  </section>
+
+  <section class="channels-section">
+    <h2>Channels</h2>
+    <div class="keyword-input-row">
+      <input type="text" id="channelInput" placeholder="Add channel...">
+      <button id="addChannel">+</button>
+    </div>
+    <ul id="channelList"></ul>
+    <label class="toggle-row">
+      <input type="checkbox" id="channelBlockingToggle">
+      <span>Block matching channels</span>
     </label>
   </section>
 

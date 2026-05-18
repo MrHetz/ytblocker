@@ -49,8 +49,48 @@ h2 {
   accent-color: #ff4444;
 }
 
-.keywords-section h2 {
+.timing-section,
+.keywords-section,
+.channels-section {
+  margin-bottom: 16px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 16px;
+}
+
+.timing-section h2,
+.keywords-section h2,
+.channels-section h2 {
   margin-top: 4px;
+}
+
+.timing-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.timing-row label {
+  display: grid;
+  gap: 4px;
+  color: #aaa;
+  font-size: 12px;
+}
+
+.timing-row input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #e1e1e1;
+  font-size: 13px;
+}
+
+.timing-unit {
+  padding-bottom: 7px;
+  color: #888;
+  font-size: 12px;
 }
 
 .keyword-input-row {
@@ -88,14 +128,16 @@ h2 {
   background: #e03030;
 }
 
-#keywordList {
+#keywordList,
+#channelList {
   list-style: none;
   max-height: 150px;
   overflow-y: auto;
   margin-bottom: 8px;
 }
 
-#keywordList li {
+#keywordList li,
+#channelList li {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -103,12 +145,14 @@ h2 {
   border-bottom: 1px solid #2a2a2a;
 }
 
-#keywordList li .kw-text {
+#keywordList li .kw-text,
+#channelList li .kw-text {
   flex: 1;
   font-size: 13px;
 }
 
-#keywordList li .kw-case {
+#keywordList li .kw-case,
+#channelList li .kw-case {
   font-size: 11px;
   padding: 2px 6px;
   border: 1px solid #555;
@@ -119,12 +163,14 @@ h2 {
   margin-right: 6px;
 }
 
-#keywordList li .kw-case.active {
+#keywordList li .kw-case.active,
+#channelList li .kw-case.active {
   border-color: #ff4444;
   color: #ff4444;
 }
 
-#keywordList li .kw-remove {
+#keywordList li .kw-remove,
+#channelList li .kw-remove {
   background: none;
   border: none;
   color: #666;
@@ -133,6 +179,7 @@ h2 {
   padding: 0 4px;
 }
 
-#keywordList li .kw-remove:hover {
+#keywordList li .kw-remove:hover,
+#channelList li .kw-remove:hover {
   color: #ff4444;
 }

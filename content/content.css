@@ -21,6 +21,14 @@ html.ytb-dismissing ytd-menu-popup-renderer {
   pointer-events: none !important;
 }
 
+/* Prevent browser scroll anchoring while background filtering mutates videos. */
+html.ytb-preserve-scroll,
+html.ytb-preserve-scroll body,
+html.ytb-preserve-scroll ytd-app,
+html.ytb-preserve-scroll #page-manager {
+  overflow-anchor: none !important;
+}
+
 /* Playables blocking - applied when html has .ytb-hide-playables */
 html.ytb-hide-playables ytd-rich-section-renderer:has([href*="/playables"]),
 html.ytb-hide-playables ytd-rich-item-renderer:has([href*="/playables"]),

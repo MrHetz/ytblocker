@@ -24,15 +24,16 @@
     "ytd-compact-video-renderer",
     "ytd-video-renderer",
     "ytd-grid-video-renderer",
+    "yt-lockup-view-model",
   ];
 
   const VIDEO_SELECTOR = VIDEO_SELECTORS.join(", ");
 
   const POPUP_SELECTORS =
-    "tp-yt-iron-dropdown, ytd-popup-container, ytd-menu-popup-renderer, [role='listbox'], [role='menu']";
+    "tp-yt-iron-dropdown, ytd-popup-container, ytd-menu-popup-renderer, [role='listbox'], [role='menu'], .ytListItemViewModelInPopup";
 
   const MENU_ITEM_SELECTORS =
-    "ytd-menu-service-item-renderer, tp-yt-paper-item, [role='menuitem'], [role='option'], a, button, li";
+    "ytd-menu-service-item-renderer, tp-yt-paper-item, [role='menuitem'], [role='option'], .ytListItemViewModelContainer, .ytListItemViewModelButtonOrAnchor, a, button, li";
 
   // --- Page Type Detection ---
 
@@ -52,23 +53,93 @@
     playablesBlocked: true,
     primetimeBlocked: true,
     keywordDismissalEnabled: false,
+    playlistDismissalEnabled: false,
+    channelBlockingEnabled: false,
+    dismissalDelayMinSeconds: 3,
+    dismissalDelayMaxSeconds: 7,
     keywords: [],
+    blockedChannels: [],
   };
 
+  const DEFAULT_DISMISSAL_DELAY_MIN_SECONDS = 3;
+  const DEFAULT_DISMISSAL_DELAY_MAX_SECONDS = 7;
+  const MAX_FILTER_ACTIONS_PER_PAGE = 10;
+  const SCROLL_RESTORE_SETTLE_MS = 2000;
+  const USER_SCROLL_EVENTS = ["wheel", "touchstart", "pointerdown", "keydown"];
+  const SCROLL_CONTAINER_SELECTORS = [
+    "html",
+    "body",
+    "ytd-app",
+    "ytd-page-manager",
+    "#page-manager",
+    "ytd-browse",
+    "ytd-watch-flexy",
+    "#contents",
+  ];
+
   let dismissalQueue = [];
+  let queuedVideoElements = new Set();
   let isProcessingQueue = false;
+  let dismissalTimerId = null;
+  let pageFilterActionCount = 0;
+  let dismissalBudgetLogged = false;
+  let blockedPlaylistIds = new Set();
 
   // --- Shared Helpers ---
 
   function getVideoTitle(videoEl) {
     const titleEl = videoEl.querySelector("#video-title")
       || videoEl.querySelector("h3[title]")
-      || videoEl.querySelector("a.yt-lockup-metadata-view-model__title");
+      || videoEl.querySelector("a.yt-lockup-metadata-view-model__title")
+      || videoEl.querySelector(".ytLockupMetadataViewModelTitle");
     if (!titleEl) return "";
     return titleEl.getAttribute("title")
       || titleEl.getAttribute("aria-label")
       || titleEl.textContent.trim()
       || "";
+  }
+
+  function normalizeText(text) {
+    return text.replace(/\s+/g, " ").trim();
+  }
+
+  function getElementLabel(el) {
+    return normalizeText(
+      el.getAttribute("title")
+        || el.getAttribute("aria-label")
+        || el.textContent
+        || ""
+    );
+  }
+
+  function getChannelTexts(videoEl) {
+    const channelTexts = [];
+    const channelSelectors = [
+      "ytd-channel-name a",
+      "#channel-name a",
+      "#byline a",
+      "a.yt-simple-endpoint[href^='/@']",
+      "a.yt-simple-endpoint[href^='/channel/']",
+      "a.yt-simple-endpoint[href^='/c/']",
+      "yt-content-metadata-view-model a[href^='/@']",
+      "a.yt-lockup-metadata-view-model__metadata[href^='/@']",
+    ];
+
+    channelSelectors.forEach((selector) => {
+      videoEl.querySelectorAll(selector).forEach((el) => {
+        const label = getElementLabel(el);
+        if (label) channelTexts.push(label);
+      });
+    });
+
+    const metadataRow = videoEl.querySelector(".ytContentMetadataViewModelMetadataRow")
+      || videoEl.querySelector("yt-content-metadata-view-model [role='group']");
+    if (metadataRow) {
+      const label = getElementLabel(metadataRow);
+      if (label) channelTexts.push(label);
+    }
+
+    return [...new Set(channelTexts)];
   }
 
   // --- Settings ---
@@ -91,13 +162,23 @@
         playablesBlocked: true,
         primetimeBlocked: true,
         keywordDismissalEnabled: false,
+        playlistDismissalEnabled: false,
+        channelBlockingEnabled: false,
+        dismissalDelayMinSeconds: DEFAULT_DISMISSAL_DELAY_MIN_SECONDS,
+        dismissalDelayMaxSeconds: DEFAULT_DISMISSAL_DELAY_MAX_SECONDS,
         keywords: [],
+        blockedChannels: [],
       },
       (result) => {
         settings = result;
         console.log("[YTBlocker] Settings loaded:", JSON.stringify({
           keywordDismissalEnabled: settings.keywordDismissalEnabled,
+          playlistDismissalEnabled: settings.playlistDismissalEnabled,
+          channelBlockingEnabled: settings.channelBlockingEnabled,
+          dismissalDelayMinSeconds: settings.dismissalDelayMinSeconds,
+          dismissalDelayMaxSeconds: settings.dismissalDelayMaxSeconds,
           keywords: settings.keywords,
+          blockedChannels: settings.blockedChannels,
         }));
         applyToggleClasses();
         if (currentPageType !== null) {
@@ -114,9 +195,20 @@
     applyToggleClasses();
     if (currentPageType === null) return;
 
-    if ("keywords" in changes || "keywordDismissalEnabled" in changes) {
-      dismissalQueue.length = 0;
-      if (("keywordDismissalEnabled" in changes && !settings.keywordDismissalEnabled) || "keywords" in changes) {
+    if (
+      "keywords" in changes ||
+      "keywordDismissalEnabled" in changes ||
+      "blockedChannels" in changes ||
+      "channelBlockingEnabled" in changes ||
+      "playlistDismissalEnabled" in changes
+    ) {
+      resetDismissalQueue(true);
+      if (
+        ("keywordDismissalEnabled" in changes && !settings.keywordDismissalEnabled) ||
+        "keywords" in changes ||
+        ("channelBlockingEnabled" in changes && !settings.channelBlockingEnabled) ||
+        "blockedChannels" in changes
+      ) {
         document.querySelectorAll(VIDEO_SELECTOR).forEach((el) => {
           el.style.opacity = "";
           el.style.pointerEvents = "";
@@ -124,8 +216,12 @@
       }
       document.querySelectorAll(VIDEO_SELECTOR).forEach((el) => {
         delete el.dataset.ytbScanned;
+        delete el.dataset.ytbChannelScanned;
+        delete el.dataset.ytbPlaylistScanned;
       });
       scanForKeywordMatches();
+      scanForChannelMatches();
+      scanForPlaylistMatches();
     }
 
     if ("primetimeBlocked" in changes && currentPageType === "feed") {
@@ -136,28 +232,81 @@
   // --- DOM Removal ---
 
   function removeMatchingElements() {
-    if (settings.shortsBlocked) {
-      const selector = SHORTS_SELECTORS.join(", ");
-      document.querySelectorAll(selector).forEach((el) => el.remove());
-    }
-    if (settings.playablesBlocked) {
-      const selector = PLAYABLES_SELECTORS.join(", ");
-      document.querySelectorAll(selector).forEach((el) => el.remove());
-    }
+    // Shorts and Playables are hidden by content.css. Avoid removing them from
+    // the live feed because YouTube may change scroll anchors during reloads.
   }
 
   // --- Keyword Matching ---
 
-  function matchesKeyword(title) {
-    if (!settings.keywordDismissalEnabled || settings.keywords.length === 0) {
+  function matchesTextList(text, list, enabled) {
+    if (!enabled || list.length === 0) {
       return false;
     }
-    return settings.keywords.some((kw) => {
-      if (kw.caseSensitive) {
-        return title.includes(kw.text);
+    return list.some((item) => {
+      if (item.caseSensitive) {
+        return text.includes(item.text);
       }
-      return title.toLowerCase().includes(kw.text.toLowerCase());
+      return text.toLowerCase().includes(item.text.toLowerCase());
     });
+  }
+
+  function matchesKeyword(title) {
+    return matchesTextList(
+      title,
+      settings.keywords,
+      settings.keywordDismissalEnabled
+    );
+  }
+
+  function normalizeMatchText(text) {
+    return text
+      .toLowerCase()
+      .replace(/^the\s+/, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function matchesChannelText(channelText, blockedChannel) {
+    if (blockedChannel.caseSensitive) {
+      return channelText.includes(blockedChannel.text);
+    }
+
+    const normalizedChannelText = normalizeMatchText(channelText);
+    const normalizedBlockedChannel = normalizeMatchText(blockedChannel.text);
+    if (!normalizedBlockedChannel) return false;
+
+    return (
+      channelText.toLowerCase().includes(blockedChannel.text.toLowerCase()) ||
+      normalizedChannelText.includes(normalizedBlockedChannel)
+    );
+  }
+
+  function getMatchingChannelText(channelTexts) {
+    if (!settings.channelBlockingEnabled || settings.blockedChannels.length === 0) {
+      return "";
+    }
+
+    return channelTexts.find((channelText) => (
+      settings.blockedChannels.some((blockedChannel) => (
+        matchesChannelText(channelText, blockedChannel)
+      ))
+    )) || "";
+  }
+
+  function enqueueVideoMatch(videoEl, matchType, matchedText) {
+    console.log("[YTBlocker] " + matchType + " match:", matchedText);
+    if (currentPageType === "search") {
+      // On search pages, remove via the paced queue — the "Not Interested"
+      // dismissal flow simulates clicks that trigger auto-navigation.
+      enqueueFilterAction(videoEl, "remove");
+    } else if (currentPageType === "watch") {
+      // Watch sidebar matching is hide-only because dismissal clicks can
+      // navigate the main player.
+      enqueueFilterAction(videoEl, "hide");
+    } else {
+      enqueueFilterAction(videoEl, "dismiss");
+    }
   }
 
   function scanForKeywordMatches() {
@@ -180,18 +329,7 @@
       el.dataset.ytbScanned = "true";
 
       if (matchesKeyword(title)) {
-        console.log("[YTBlocker] Keyword match:", title);
-        if (currentPageType === "search") {
-          // On search pages, remove immediately — the "Not Interested"
-          // dismissal flow simulates clicks that trigger auto-navigation.
-          el.remove();
-        } else {
-          el.style.opacity = "0";
-          el.style.pointerEvents = "none";
-          if (currentPageType !== "watch") {
-            dismissalQueue.push({ el, retries: 0 });
-          }
-        }
+        enqueueVideoMatch(el, "Keyword", title);
         matched = true;
       }
     });
@@ -201,6 +339,160 @@
     if (newCount > 0) {
       console.log("[YTBlocker] Scan: total=" + allVideos.length + " alreadyScanned=" + scannedCount + " new=" + newCount + " queueSize=" + dismissalQueue.length);
     }
+  }
+
+  // --- Channel Matching ---
+
+  function scanForChannelMatches() {
+    if (
+      !settings.channelBlockingEnabled ||
+      settings.blockedChannels.length === 0
+    ) {
+      return;
+    }
+
+    const allVideos = document.querySelectorAll(VIDEO_SELECTOR);
+    let scannedCount = 0;
+    let newCount = 0;
+    let matched = false;
+
+    allVideos.forEach((el) => {
+      if (el.dataset.ytbChannelScanned) { scannedCount++; return; }
+
+      const channelTexts = getChannelTexts(el);
+      if (channelTexts.length === 0) return;
+
+      newCount++;
+      el.dataset.ytbChannelScanned = "true";
+
+      const matchingChannelText = getMatchingChannelText(channelTexts);
+      if (matchingChannelText) {
+        enqueueVideoMatch(el, "Channel", matchingChannelText);
+        matched = true;
+      }
+    });
+
+    if (matched) processQueue();
+
+    if (newCount > 0) {
+      console.log("[YTBlocker] Channel scan: total=" + allVideos.length + " alreadyScanned=" + scannedCount + " new=" + newCount + " queueSize=" + dismissalQueue.length);
+    }
+  }
+
+  // --- Playlist Matching ---
+
+  function getPlaylistId(videoEl) {
+    const playlistLink = videoEl.querySelector(
+      "a[href*='list='], a[href^='/playlist?list=']"
+    );
+    if (playlistLink) {
+      try {
+        const url = new URL(playlistLink.getAttribute("href"), location.origin);
+        const listId = url.searchParams.get("list");
+        if (listId) return listId;
+      } catch (e) {
+        // Fall back to class parsing below.
+      }
+    }
+
+    const contentIdEl = videoEl.querySelector("[class*='content-id-']");
+    if (!contentIdEl) return "";
+
+    const contentIdClass = [...contentIdEl.classList].find((className) =>
+      className.startsWith("content-id-")
+    );
+    return contentIdClass ? contentIdClass.slice("content-id-".length) : "";
+  }
+
+  function getPlaylistItemCount(videoEl) {
+    const playlistLinks = videoEl.querySelectorAll(
+      "a[href*='list='], a[href^='/playlist?list=']"
+    );
+    if (playlistLinks.length === 0) return 0;
+
+    const countMatch = videoEl.textContent.match(
+      /\b([\d,]+)\s+(videos?|episodes?)\b/i
+    );
+    if (!countMatch) return 0;
+
+    return Number.parseInt(countMatch[1].replace(/,/g, ""), 10) || 0;
+  }
+
+  function hasPlaylistLink(videoEl) {
+    return Boolean(
+      videoEl.querySelector("a[href*='list='], a[href^='/playlist?list=']")
+    );
+  }
+
+  function hasPlaylistCardStructure(videoEl) {
+    if (
+      videoEl.querySelector(
+        "yt-collection-thumbnail-view-model, yt-collections-stack, [class*='ytLockupViewModelCollectionStack'], [class*='content-id-PL']"
+      )
+    ) {
+      return true;
+    }
+
+    return /\bview full (playlist|podcast)\b/i.test(videoEl.textContent);
+  }
+
+  function shouldBlockPlaylist(videoEl) {
+    if (!hasPlaylistLink(videoEl)) return false;
+
+    const playlistCount = getPlaylistItemCount(videoEl);
+    if (playlistCount > 1) return true;
+
+    return hasPlaylistCardStructure(videoEl);
+  }
+
+  function scanForPlaylistMatches() {
+    if (!settings.playlistDismissalEnabled) return;
+
+    const allVideos = document.querySelectorAll(VIDEO_SELECTOR);
+    let candidateCount = 0;
+    let matched = false;
+
+    allVideos.forEach((el) => {
+      if (el.dataset.ytbPlaylistScanned) return;
+
+      const playlistId = getPlaylistId(el);
+      if (playlistId || hasPlaylistLink(el)) {
+        candidateCount++;
+      }
+
+      if (playlistId && blockedPlaylistIds.has(playlistId)) {
+        console.log("[YTBlocker] Reinserted playlist queued for removal:", playlistId);
+        el.dataset.ytbPlaylistScanned = "true";
+        enqueueFilterAction(el, "remove", 0, { playlistId });
+        matched = true;
+        return;
+      }
+
+      const playlistCount = getPlaylistItemCount(el);
+      if (!shouldBlockPlaylist(el)) return;
+
+      el.dataset.ytbPlaylistScanned = "true";
+
+      console.log(
+        "[YTBlocker] Playlist match queued:",
+        getVideoTitle(el),
+        "items=" + (playlistCount || "unknown"),
+        "id=" + (playlistId || "(unknown)")
+      );
+      enqueueFilterAction(el, "block-playlist", 0, { playlistId });
+      matched = true;
+    });
+
+    if (candidateCount > 0) {
+      console.log(
+        "[YTBlocker] Playlist scan: candidates=" +
+          candidateCount +
+          " queueSize=" +
+          dismissalQueue.length
+      );
+    }
+
+    if (matched) processQueue();
   }
 
   // --- Primetime Movies Blocking ---
@@ -242,15 +534,88 @@
       }
       shelf.dataset.ytbPrimetimeScanned = "true";
 
-      console.log("[YTBlocker] Primetime shelf removed");
-      shelf.remove();
+      console.log("[YTBlocker] Primetime shelf hidden");
+      shelf.style.opacity = "0";
+      shelf.style.pointerEvents = "none";
     }
   }
 
   // --- "Not Interested" Dismissal Queue ---
 
+  function randomBetween(min, max) {
+    return min + Math.random() * (max - min);
+  }
+
+  function clampDelaySeconds(value, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.min(Math.max(number, 1), 120);
+  }
+
   function randomDelay() {
-    return 1500 + Math.random() * 1500;
+    const minSeconds = clampDelaySeconds(
+      settings.dismissalDelayMinSeconds,
+      DEFAULT_DISMISSAL_DELAY_MIN_SECONDS
+    );
+    const maxSeconds = clampDelaySeconds(
+      settings.dismissalDelayMaxSeconds,
+      DEFAULT_DISMISSAL_DELAY_MAX_SECONDS
+    );
+    const minDelay = Math.min(minSeconds, maxSeconds) * 1000;
+    const maxDelay = Math.max(minSeconds, maxSeconds) * 1000;
+
+    return randomBetween(minDelay, maxDelay);
+  }
+
+  function hasQueuedWorkEnabled() {
+    return (
+      settings.keywordDismissalEnabled ||
+      settings.channelBlockingEnabled ||
+      settings.playlistDismissalEnabled
+    );
+  }
+
+  function resetDismissalQueue(resetPageBudget = false) {
+    dismissalQueue.length = 0;
+    queuedVideoElements.clear();
+    isProcessingQueue = false;
+    dismissalBudgetLogged = false;
+
+    if (dismissalTimerId !== null) {
+      clearTimeout(dismissalTimerId);
+      dismissalTimerId = null;
+    }
+
+    if (resetPageBudget) {
+      pageFilterActionCount = 0;
+      blockedPlaylistIds.clear();
+    }
+  }
+
+  function hasDismissalBudget() {
+    return (
+      pageFilterActionCount + dismissalQueue.length < MAX_FILTER_ACTIONS_PER_PAGE
+    );
+  }
+
+  function enqueueFilterAction(videoEl, action, retries = 0, metadata = {}) {
+    if (queuedVideoElements.has(videoEl)) return;
+
+    if (!hasDismissalBudget()) {
+      if (!dismissalBudgetLogged) {
+        console.log(
+          "[YTBlocker] Filter action budget reached for this page. Additional matching videos will be left visible."
+        );
+        dismissalBudgetLogged = true;
+      }
+      return;
+    }
+
+    queuedVideoElements.add(videoEl);
+    dismissalQueue.push({ el: videoEl, action, retries, metadata });
+    console.log(
+      "[YTBlocker] Queue add: action=" + action + " size=" + dismissalQueue.length
+    );
   }
 
   function waitForElement(parent, selector, timeout = 3000) {
@@ -283,14 +648,47 @@
       // opacity:0 elements (from ytb-dismissing) still have offsetParent, so this works
       if (getComputedStyle(popup).display === "none") continue;
 
-      const candidates = popup.querySelectorAll(MENU_ITEM_SELECTORS);
+      const candidates = [
+        ...(popup.matches(MENU_ITEM_SELECTORS) ? [popup] : []),
+        ...popup.querySelectorAll(MENU_ITEM_SELECTORS),
+      ];
       for (const item of candidates) {
         if (item.textContent.trim().toLowerCase().includes("not interested")) {
-          return item;
+          return getMenuItemClickTarget(item);
         }
       }
     }
     return null;
+  }
+
+  function getMenuItemClickTarget(item) {
+    const clickable = item.querySelector(
+      "button, a, [role='menuitem'], [role='option']"
+    );
+    return clickable || item;
+  }
+
+  function waitForNotInterestedItem(timeout = 2500) {
+    return new Promise((resolve) => {
+      const existing = findNotInterestedItem();
+      if (existing) return resolve(existing);
+
+      let timeoutId = null;
+      const observer = new MutationObserver(() => {
+        const item = findNotInterestedItem();
+        if (!item) return;
+
+        clearTimeout(timeoutId);
+        observer.disconnect();
+        resolve(item);
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      timeoutId = setTimeout(() => {
+        observer.disconnect();
+        resolve(findNotInterestedItem());
+      }, timeout);
+    });
   }
 
   function getPopupMenuText() {
@@ -298,7 +696,10 @@
     const texts = [];
     for (const popup of popups) {
       if (popup.getAttribute("aria-hidden") === "true") continue;
-      const items = popup.querySelectorAll(MENU_ITEM_SELECTORS);
+      const items = [
+        ...(popup.matches(MENU_ITEM_SELECTORS) ? [popup] : []),
+        ...popup.querySelectorAll(MENU_ITEM_SELECTORS),
+      ];
       items.forEach((i) => texts.push(i.textContent.trim()));
     }
     return texts;
@@ -309,8 +710,209 @@
     document.body.click();
   }
 
-  async function dismissVideo(videoEl) {
+  function getScrollingElement() {
+    return document.scrollingElement || document.documentElement;
+  }
+
+  function isScrollableElement(el) {
+    if (!el || el === window || el.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+
+    return el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth;
+  }
+
+  function collectScrollTargets(anchorEl = null) {
+    const targets = new Set([
+      getScrollingElement(),
+      document.documentElement,
+      document.body,
+    ]);
+
+    SCROLL_CONTAINER_SELECTORS.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((el) => targets.add(el));
+    });
+
+    for (let el = anchorEl; el; el = el.parentElement) {
+      if (isScrollableElement(el)) {
+        targets.add(el);
+      }
+    }
+
+    return [...targets].filter(Boolean);
+  }
+
+  function readScrollSnapshot(anchorEl = null) {
+    return {
+      windowX: window.scrollX,
+      windowY: window.scrollY,
+      targets: collectScrollTargets(anchorEl).map((el) => ({
+        el,
+        left: el.scrollLeft,
+        top: el.scrollTop,
+      })),
+    };
+  }
+
+  function createScrollPreserver(anchorEl = null) {
+    const position = readScrollSnapshot(anchorEl);
+    const listenerOptions = { capture: true, passive: true };
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    const originalFocus = HTMLElement.prototype.focus;
+    const originalScrollTo = window.scrollTo;
+    const originalScrollBy = window.scrollBy;
+    let userInteracted = false;
+    let isRestoring = false;
+    let restoreFrameId = null;
+    let patchedScrollIntoView = false;
+    let patchedFocus = false;
+    let patchedScrollTo = false;
+    let patchedScrollBy = false;
+
+    function restorePosition() {
+      if (userInteracted) return;
+      isRestoring = true;
+      originalScrollTo.call(window, position.windowX, position.windowY);
+      position.targets.forEach(({ el, left, top }) => {
+        if (!el.isConnected && el !== document.body && el !== document.documentElement) {
+          return;
+        }
+        el.scrollLeft = left;
+        el.scrollTop = top;
+      });
+      requestAnimationFrame(() => {
+        isRestoring = false;
+      });
+    }
+
+    function scheduleScrollRestore() {
+      if (userInteracted || isRestoring || restoreFrameId !== null) return;
+      restoreFrameId = requestAnimationFrame(() => {
+        restoreFrameId = null;
+        restorePosition();
+      });
+    }
+
+    const markUserInteracted = (event) => {
+      if (event && event.isTrusted === false) return;
+      userInteracted = true;
+    };
+
+    document.documentElement.classList.add("ytb-preserve-scroll");
+
+    USER_SCROLL_EVENTS.forEach((eventName) => {
+      window.addEventListener(eventName, markUserInteracted, listenerOptions);
+    });
+    window.addEventListener("scroll", scheduleScrollRestore, listenerOptions);
+    position.targets.forEach(({ el }) => {
+      el.addEventListener("scroll", scheduleScrollRestore, listenerOptions);
+    });
+
+    try {
+      Element.prototype.scrollIntoView = function (...args) {
+        if (!userInteracted) return undefined;
+        return originalScrollIntoView.apply(this, args);
+      };
+      patchedScrollIntoView = true;
+    } catch (e) {
+      console.log("[YTBlocker] Scroll preservation: unable to patch scrollIntoView", e);
+    }
+
+    try {
+      HTMLElement.prototype.focus = function (options) {
+        if (userInteracted) {
+          return originalFocus.apply(this, arguments);
+        }
+
+        const focusOptions = options && typeof options === "object"
+          ? { ...options, preventScroll: true }
+          : { preventScroll: true };
+        try {
+          return originalFocus.call(this, focusOptions);
+        } catch (e) {
+          return originalFocus.apply(this, arguments);
+        }
+      };
+      patchedFocus = true;
+    } catch (e) {
+      console.log("[YTBlocker] Scroll preservation: unable to patch focus", e);
+    }
+
+    try {
+      window.scrollTo = function (...args) {
+        if (!userInteracted) return undefined;
+        return originalScrollTo.apply(window, args);
+      };
+      patchedScrollTo = true;
+    } catch (e) {
+      console.log("[YTBlocker] Scroll preservation: unable to patch scrollTo", e);
+    }
+
+    try {
+      window.scrollBy = function (...args) {
+        if (!userInteracted) return undefined;
+        return originalScrollBy.apply(window, args);
+      };
+      patchedScrollBy = true;
+    } catch (e) {
+      console.log("[YTBlocker] Scroll preservation: unable to patch scrollBy", e);
+    }
+
+    return {
+      restore() {
+        restorePosition();
+      },
+      release() {
+        if (restoreFrameId !== null) {
+          cancelAnimationFrame(restoreFrameId);
+        }
+        document.documentElement.classList.remove("ytb-preserve-scroll");
+        USER_SCROLL_EVENTS.forEach((eventName) => {
+          window.removeEventListener(eventName, markUserInteracted, listenerOptions);
+        });
+        window.removeEventListener("scroll", scheduleScrollRestore, listenerOptions);
+        position.targets.forEach(({ el }) => {
+          el.removeEventListener("scroll", scheduleScrollRestore, listenerOptions);
+        });
+        if (patchedScrollIntoView) {
+          Element.prototype.scrollIntoView = originalScrollIntoView;
+        }
+        if (patchedFocus) {
+          HTMLElement.prototype.focus = originalFocus;
+        }
+        if (patchedScrollTo) {
+          window.scrollTo = originalScrollTo;
+        }
+        if (patchedScrollBy) {
+          window.scrollBy = originalScrollBy;
+        }
+      },
+    };
+  }
+
+  async function withScrollPreserved(action, anchorEl = null) {
+    const preserver = createScrollPreserver(anchorEl);
+
+    try {
+      const result = await action(() => preserver.restore());
+      preserver.restore();
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          preserver.restore();
+          resolve();
+        });
+      });
+      await new Promise((resolve) => setTimeout(resolve, SCROLL_RESTORE_SETTLE_MS));
+      preserver.restore();
+      return result;
+    } finally {
+      preserver.release();
+    }
+  }
+
+  async function clickNotInterested(videoEl, restoreScroll = () => {}) {
     const title = getVideoTitle(videoEl) || "(unknown)";
+    const projection = projectElementIntoViewport(videoEl);
 
     try {
       // Hover to trigger lazy rendering of the menu button
@@ -320,6 +922,7 @@
       videoEl.dispatchEvent(
         new MouseEvent("mouseover", { bubbles: true, composed: true })
       );
+      restoreScroll();
 
       const menuButton = await waitForElement(
         videoEl,
@@ -334,29 +937,137 @@
       console.log("[YTBlocker] Opening menu for:", title);
       document.documentElement.classList.add("ytb-dismissing");
       menuButton.click();
+      restoreScroll();
 
       await new Promise((r) => setTimeout(r, 500));
+      restoreScroll();
 
-      const notInterestedItem = findNotInterestedItem();
+      const notInterestedItem = await waitForNotInterestedItem();
 
       if (!notInterestedItem) {
         const allPopupText = getPopupMenuText();
         console.log("[YTBlocker] FAIL: 'Not interested' not found. Visible menu text:", allPopupText);
         closePopup();
+        restoreScroll();
         document.documentElement.classList.remove("ytb-dismissing");
         return false;
       }
 
       console.log("[YTBlocker] DISMISSED:", title);
+      console.log("[YTBlocker] Clicking menu item:", notInterestedItem.tagName);
       notInterestedItem.click();
+      restoreScroll();
       document.documentElement.classList.remove("ytb-dismissing");
       return true;
     } catch (e) {
       console.log("[YTBlocker] FAIL: error for:", title, e);
       closePopup();
+      restoreScroll();
       document.documentElement.classList.remove("ytb-dismissing");
       return false;
+    } finally {
+      projection.release();
+      restoreScroll();
     }
+  }
+
+  async function dismissVideo(videoEl) {
+    return withScrollPreserved(
+      (restoreScroll) => clickNotInterested(videoEl, restoreScroll),
+      videoEl
+    );
+  }
+
+  function projectElementIntoViewport(el) {
+    const rect = el.getBoundingClientRect();
+    const margin = 24;
+    const isInViewport =
+      rect.bottom > margin &&
+      rect.top < window.innerHeight - margin &&
+      rect.right > margin &&
+      rect.left < window.innerWidth - margin;
+
+    if (isInViewport) {
+      return { release() {} };
+    }
+
+    const previous = {
+      transform: el.style.transform,
+      transformOrigin: el.style.transformOrigin,
+      zIndex: el.style.zIndex,
+      opacity: el.style.opacity,
+      pointerEvents: el.style.pointerEvents,
+      willChange: el.style.willChange,
+    };
+    const targetTop = Math.min(
+      Math.max(margin, window.innerHeight / 3),
+      Math.max(margin, window.innerHeight - Math.min(rect.height, 120) - margin)
+    );
+    const targetLeft = Math.min(
+      Math.max(margin, rect.left),
+      Math.max(margin, window.innerWidth - Math.min(rect.width, 320) - margin)
+    );
+    const deltaX = targetLeft - rect.left;
+    const deltaY = targetTop - rect.top;
+    const existingTransform = previous.transform || "";
+
+    el.style.transform = `translate(${deltaX}px, ${deltaY}px) ${existingTransform}`;
+    el.style.transformOrigin = "top left";
+    el.style.zIndex = "-1";
+    el.style.opacity = "0";
+    el.style.pointerEvents = "none";
+    el.style.willChange = "transform";
+
+    return {
+      release() {
+        el.style.transform = previous.transform;
+        el.style.transformOrigin = previous.transformOrigin;
+        el.style.zIndex = previous.zIndex;
+        el.style.opacity = previous.opacity;
+        el.style.pointerEvents = previous.pointerEvents;
+        el.style.willChange = previous.willChange;
+      },
+    };
+  }
+
+  // Keep every queued video filter mutation here so background filtering does
+  // not move the user's viewport as YouTube menus and cards change.
+  async function performQueuedFilterAction(videoEl, action, metadata) {
+    return withScrollPreserved(async (restoreScroll) => {
+      if (action === "remove") {
+        videoEl.remove();
+        restoreScroll();
+        return true;
+      }
+
+      if (action === "hide") {
+        videoEl.style.opacity = "0";
+        videoEl.style.pointerEvents = "none";
+        restoreScroll();
+        return true;
+      }
+
+      if (action === "block-playlist") {
+        if (metadata.playlistId) {
+          blockedPlaylistIds.add(metadata.playlistId);
+        }
+
+        const success = await clickNotInterested(videoEl, restoreScroll);
+        if (videoEl.isConnected) {
+          console.log(
+            "[YTBlocker] Removing playlist card after dismissal attempt. id=" +
+              (metadata.playlistId || "(unknown)") +
+              " notInterestedClicked=" +
+              success
+          );
+          videoEl.remove();
+          restoreScroll();
+        }
+        return success;
+      }
+
+      return clickNotInterested(videoEl, restoreScroll);
+    }, videoEl);
   }
 
   const MAX_RETRIES = 2;
@@ -364,28 +1075,65 @@
   function processQueue() {
     if (isProcessingQueue || dismissalQueue.length === 0) return;
     if (document.hidden) return;
+    if (!hasQueuedWorkEnabled()) return;
+    if (pageFilterActionCount >= MAX_FILTER_ACTIONS_PER_PAGE) {
+      resetDismissalQueue(false);
+      return;
+    }
 
     isProcessingQueue = true;
+    scheduleNextDismissal(randomDelay());
 
     async function processNext() {
-      if (dismissalQueue.length === 0 || document.hidden || !settings.keywordDismissalEnabled) {
+      dismissalTimerId = null;
+
+      if (
+        dismissalQueue.length === 0 ||
+        document.hidden ||
+        !hasQueuedWorkEnabled()
+      ) {
         isProcessingQueue = false;
         return;
       }
 
-      const { el: videoEl, retries } = dismissalQueue.shift();
+      if (pageFilterActionCount >= MAX_FILTER_ACTIONS_PER_PAGE) {
+        resetDismissalQueue(false);
+        return;
+      }
+
+      const { el: videoEl, action, retries, metadata } = dismissalQueue.shift();
+      queuedVideoElements.delete(videoEl);
 
       if (videoEl.isConnected) {
-        const success = await dismissVideo(videoEl);
-        if (!success && retries < MAX_RETRIES) {
-          dismissalQueue.push({ el: videoEl, retries: retries + 1 });
+        pageFilterActionCount++;
+
+        const success = await performQueuedFilterAction(
+          videoEl,
+          action,
+          metadata || {}
+        );
+        if (
+          !success &&
+          action !== "remove" &&
+          action !== "hide" &&
+          action !== "block-playlist" &&
+          retries < MAX_RETRIES
+        ) {
+          enqueueFilterAction(videoEl, action, retries + 1, metadata);
         }
       }
 
-      setTimeout(processNext, randomDelay());
+      if (dismissalQueue.length === 0) {
+        isProcessingQueue = false;
+        return;
+      }
+
+      scheduleNextDismissal(randomDelay());
     }
 
-    processNext();
+    function scheduleNextDismissal(delay) {
+      dismissalTimerId = setTimeout(processNext, delay);
+    }
   }
 
   document.addEventListener("visibilitychange", () => {
@@ -399,6 +1147,8 @@
   function runAllScans() {
     removeMatchingElements();
     scanForKeywordMatches();
+    scanForChannelMatches();
+    scanForPlaylistMatches();
     if (currentPageType === "feed") {
       scanForPrimetimeMovies();
     }
@@ -429,11 +1179,14 @@
     clearInterval(scanIntervalId);
     scanIntervalId = null;
     clearTimeout(debounceTimer);
+    resetDismissalQueue(true);
 
     if (currentPageType !== null) {
       // Reset scan markers — new page has new content
       document.querySelectorAll(VIDEO_SELECTOR).forEach((el) => {
         delete el.dataset.ytbScanned;
+        delete el.dataset.ytbChannelScanned;
+        delete el.dataset.ytbPlaylistScanned;
       });
       document.querySelectorAll(PRIMETIME_SHELF_SELECTOR).forEach((el) => {
         delete el.dataset.ytbPrimetimeScanned;

@@ -7,11 +7,23 @@
   const keywordDismissalToggle = document.getElementById(
     "keywordDismissalToggle"
   );
+  const channelBlockingToggle = document.getElementById(
+    "channelBlockingToggle"
+  );
+  const playlistDismissalToggle = document.getElementById(
+    "playlistDismissalToggle"
+  );
   const keywordInput = document.getElementById("keywordInput");
   const addKeywordBtn = document.getElementById("addKeyword");
   const keywordList = document.getElementById("keywordList");
+  const channelInput = document.getElementById("channelInput");
+  const addChannelBtn = document.getElementById("addChannel");
+  const channelList = document.getElementById("channelList");
+  const delayMinInput = document.getElementById("delayMinInput");
+  const delayMaxInput = document.getElementById("delayMaxInput");
 
   let keywords = [];
+  let blockedChannels = [];
 
   // --- Load Settings ---
 
@@ -21,15 +33,26 @@
       playablesBlocked: true,
       primetimeBlocked: true,
       keywordDismissalEnabled: false,
+      channelBlockingEnabled: false,
+      playlistDismissalEnabled: false,
+      dismissalDelayMinSeconds: 3,
+      dismissalDelayMaxSeconds: 7,
       keywords: [],
+      blockedChannels: [],
     },
     (result) => {
       shortsToggle.checked = result.shortsBlocked;
       playablesToggle.checked = result.playablesBlocked;
       primetimeToggle.checked = result.primetimeBlocked;
       keywordDismissalToggle.checked = result.keywordDismissalEnabled;
+      channelBlockingToggle.checked = result.channelBlockingEnabled;
+      playlistDismissalToggle.checked = result.playlistDismissalEnabled;
+      delayMinInput.value = result.dismissalDelayMinSeconds;
+      delayMaxInput.value = result.dismissalDelayMaxSeconds;
       keywords = result.keywords;
+      blockedChannels = result.blockedChannels;
       renderKeywords();
+      renderChannels();
     }
   );
 
@@ -53,58 +76,131 @@
     });
   });
 
-  // --- Keyword Management ---
+  channelBlockingToggle.addEventListener("change", () => {
+    chrome.storage.sync.set({
+      channelBlockingEnabled: channelBlockingToggle.checked,
+    });
+  });
 
-  function saveKeywords() {
-    chrome.storage.sync.set({ keywords });
+  playlistDismissalToggle.addEventListener("change", () => {
+    chrome.storage.sync.set({
+      playlistDismissalEnabled: playlistDismissalToggle.checked,
+    });
+  });
+
+  function clampDelay(value, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.min(Math.max(Math.round(number), 1), 120);
   }
 
-  function renderKeywords() {
-    keywordList.innerHTML = "";
-    keywords.forEach((kw, index) => {
+  function saveDelaySettings(changedInput) {
+    let minSeconds = clampDelay(delayMinInput.value, 3);
+    let maxSeconds = clampDelay(delayMaxInput.value, 7);
+
+    if (minSeconds > maxSeconds) {
+      if (changedInput === delayMinInput) {
+        maxSeconds = minSeconds;
+      } else {
+        minSeconds = maxSeconds;
+      }
+    }
+
+    delayMinInput.value = minSeconds;
+    delayMaxInput.value = maxSeconds;
+    chrome.storage.sync.set({
+      dismissalDelayMinSeconds: minSeconds,
+      dismissalDelayMaxSeconds: maxSeconds,
+    });
+  }
+
+  delayMinInput.addEventListener("change", () => {
+    saveDelaySettings(delayMinInput);
+  });
+  delayMaxInput.addEventListener("change", () => {
+    saveDelaySettings(delayMaxInput);
+  });
+
+  // --- List Management ---
+
+  function saveList(storageKey, list) {
+    chrome.storage.sync.set({ [storageKey]: list });
+  }
+
+  function renderList(listEl, list, save) {
+    listEl.innerHTML = "";
+    list.forEach((item, index) => {
       const li = document.createElement("li");
 
       const text = document.createElement("span");
       text.className = "kw-text";
-      text.textContent = kw.text;
+      text.textContent = item.text;
 
       const caseBtn = document.createElement("button");
-      caseBtn.className = "kw-case" + (kw.caseSensitive ? " active" : "");
-      caseBtn.textContent = kw.caseSensitive ? "Aa" : "aa";
-      caseBtn.title = kw.caseSensitive ? "Case-sensitive" : "Case-insensitive";
+      caseBtn.className = "kw-case" + (item.caseSensitive ? " active" : "");
+      caseBtn.textContent = item.caseSensitive ? "Aa" : "aa";
+      caseBtn.title = item.caseSensitive ? "Case-sensitive" : "Case-insensitive";
       caseBtn.addEventListener("click", () => {
-        keywords[index].caseSensitive = !keywords[index].caseSensitive;
-        saveKeywords();
-        renderKeywords();
+        list[index].caseSensitive = !list[index].caseSensitive;
+        save();
+        renderList(listEl, list, save);
       });
 
       const removeBtn = document.createElement("button");
       removeBtn.className = "kw-remove";
       removeBtn.textContent = "\u00d7";
       removeBtn.addEventListener("click", () => {
-        keywords.splice(index, 1);
-        saveKeywords();
-        renderKeywords();
+        list.splice(index, 1);
+        save();
+        renderList(listEl, list, save);
       });
 
       li.append(text, caseBtn, removeBtn);
-      keywordList.appendChild(li);
+      listEl.appendChild(li);
     });
   }
 
-  function addKeyword() {
-    const text = keywordInput.value.trim();
+  function addListItem(inputEl, list, save, render) {
+    const text = inputEl.value.trim();
     if (!text) return;
-    if (keywords.some((kw) => kw.text === text)) return;
+    if (list.some((item) => item.text === text)) return;
 
-    keywords.push({ text, caseSensitive: false });
-    keywordInput.value = "";
-    saveKeywords();
-    renderKeywords();
+    list.push({ text, caseSensitive: false });
+    inputEl.value = "";
+    save();
+    render();
+  }
+
+  function saveKeywords() {
+    saveList("keywords", keywords);
+  }
+
+  function saveChannels() {
+    saveList("blockedChannels", blockedChannels);
+  }
+
+  function renderKeywords() {
+    renderList(keywordList, keywords, saveKeywords);
+  }
+
+  function renderChannels() {
+    renderList(channelList, blockedChannels, saveChannels);
+  }
+
+  function addKeyword() {
+    addListItem(keywordInput, keywords, saveKeywords, renderKeywords);
+  }
+
+  function addChannel() {
+    addListItem(channelInput, blockedChannels, saveChannels, renderChannels);
   }
 
   addKeywordBtn.addEventListener("click", addKeyword);
   keywordInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") addKeyword();
+  });
+  addChannelBtn.addEventListener("click", addChannel);
+  channelInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addChannel();
   });
 })();
